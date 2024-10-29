@@ -108,11 +108,11 @@ namespace GeneyX.Services
                 foreach (string fileName in gzFileOrderd)
                 {
                     int retryCount = 0;
-                    while (!await HandleFile(fileName) && retryCount < 3)
+                    while (!await HandleFile(fileName) && retryCount < 10)
                     {
                         retryCount++;
                     }
-                    if(retryCount == 3)
+                    if(retryCount == 10)
                     {
                         _logger.LogWarning($"Failed to handle file {fileName}. Retrying... Attempt {retryCount}");
                     }
@@ -195,11 +195,12 @@ namespace GeneyX.Services
         private async Task<string?> DecompressGzipStream(byte[] compressedData)
         {
             _logger.LogInformation("Start decompress ");
-            string tempFilePath = Path.GetTempFileName();
+            string tempFilePath = Path.GetTempFileName() + ".gz";
             try
             {
                 // Write to a temporary file
                 await File.WriteAllBytesAsync(tempFilePath, compressedData);
+                _logger.LogInformation($"temp {tempFilePath}");
                 using FileStream fileStream = new FileStream(tempFilePath, FileMode.Open, FileAccess.Read);
                 GZipStream gzipStream = new GZipStream(fileStream, CompressionMode.Decompress);
                 StreamReader reader = new StreamReader(gzipStream, Encoding.UTF8);
