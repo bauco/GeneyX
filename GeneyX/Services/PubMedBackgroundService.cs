@@ -115,6 +115,7 @@ namespace GeneyX.Services
                     if(retryCount == 10)
                     {
                         _logger.LogWarning($"Failed to handle file {fileName}. Retrying... Attempt {retryCount}");
+                        break;
                     }
 
                     if (_publications.Count >= 1000)
@@ -123,7 +124,7 @@ namespace GeneyX.Services
                         break;
                     }
                 }
-                if(_publications.Count < 1000)
+                if(_publications.Count < 1000 && _publications.Count < 0)
                 {
                     _repository.UpdatePublications(_publications);
                 }
