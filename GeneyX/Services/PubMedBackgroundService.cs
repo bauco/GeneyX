@@ -158,6 +158,7 @@ namespace GeneyX.Services
             try
             {
                 FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpFileName);
+                request.Timeout = 60000;
                 FtpWebResponse response = (FtpWebResponse)request.GetResponse();
 
                 Stream responseStream = response.GetResponseStream();
