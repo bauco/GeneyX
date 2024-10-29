@@ -4,8 +4,8 @@ using GeneyX.Services;
 var builder = WebApplication.CreateBuilder(args);
 // Add services to the container
 builder.Services.AddLogging(); // Add logging service
-// Bind CrawlingOptions from appsettings.json
-builder.Services.Configure<CrawlingOptions>(builder.Configuration.GetSection("CrawlingOptions"));
+// Ex 2 Question 1: Bind Crawling configuration from appsettings.json
+builder.Services.Configure<CrawlingConfiguration>(builder.Configuration.GetSection("CrawlingConfiguration"));
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddScoped<IPublicationsService, PublicationsService>();
 builder.Services.AddSingleton<IPublicationRepository, PublicationRepository>();
