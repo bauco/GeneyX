@@ -1,19 +1,9 @@
+using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore.SqlServer;
 namespace GeneyX
 {
 
-    public interface IPublicationRepository
-    {
-        void AddPublication(Publication publication);
-        void UpdatePublications(IEnumerable<Publication> publications);
-        List<Publication> GetLatestPublications(int count);
-        List<Publication> SearchPublications(string searchTerm);
-    }
-
-    public interface IPublicationsService
-    {
-        IEnumerable<Publication> GetLatestPublications(int count);
-        IEnumerable<Publication> SearchPublications(string term);
-    }
 
     public class CrawlingConfiguration
     {
@@ -24,9 +14,32 @@ namespace GeneyX
 
     public class Publication
     {
+        [Key]
         public string PMID { get; set; } = string.Empty;
         public string ArticleTitle { get; set; } = string.Empty;
         public string Abstract { get; set; } = string.Empty;
         public int PublishedYear { get; set; }
+    }
+    public class PublicationDbContext : DbContext
+    {
+        public PublicationDbContext(DbContextOptions<PublicationDbContext> options) : base(options) { }
+
+        public DbSet<Publication> Publications { get; set; }
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            if (!optionsBuilder.IsConfigured)
+            {
+                optionsBuilder.UseSqlServer("localConnection");
+            }
+            base.OnConfiguring(optionsBuilder);
+        }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Publication>()
+                .HasIndex(u => u.PMID)
+                .IsUnique();
+            base.OnModelCreating(modelBuilder);
+        }
     }
 }

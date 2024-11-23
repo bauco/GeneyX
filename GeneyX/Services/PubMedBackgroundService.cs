@@ -14,14 +14,14 @@ namespace GeneyX.Services
     {
         private const string _ftpUrl = "ftp://ftp.ncbi.nlm.nih.gov/pubmed/updatefiles/";
         private readonly HashSet<string> _processedFiles = new HashSet<string>();
-        private readonly IPublicationRepository _repository;
+        private readonly PublicationRepository _repository;
         private readonly List<Publication> _publications = new();
         private readonly ILogger<PubMedBackgroundService> _logger;
         private Timer _timer;
         private readonly CrawlingConfiguration _crawlConfiguration;
         private static object _processingLock = new Object();
 
-        public PubMedBackgroundService(IPublicationRepository repository, ILogger<PubMedBackgroundService> logger, IOptions<CrawlingConfiguration> configuration)
+        public PubMedBackgroundService(PublicationRepository repository, ILogger<PubMedBackgroundService> logger, IOptions<CrawlingConfiguration> configuration)
         {
             _repository = repository;
             _logger = logger;
@@ -63,8 +63,6 @@ namespace GeneyX.Services
         private async Task<List<string>> GetPMEDFiles()
         {
             List<string> files = new List<string>();
-
-            // Get the object used to communicate with the server.
             FtpWebRequest request = (FtpWebRequest)WebRequest.Create(_ftpUrl);
 
             request.Method = WebRequestMethods.Ftp.ListDirectoryDetails;
@@ -78,7 +76,6 @@ namespace GeneyX.Services
                 {
                     if (line.EndsWith(".gz"))
                     {
-                        _logger.LogInformation(line);
                         files.Add(line);
                     }
                 }
@@ -89,21 +86,19 @@ namespace GeneyX.Services
         }
         public async void CrawlRecentPublications()
         {
-            // Get the list of gz files in the FTP directory
             _logger.LogInformation("Starting to crawl PubMed FTP...");
             try
             {
                 List<string> files = await GetPMEDFiles();
-                // Filter and sort the .gz files, keeping only their names
                 List<string> gzFileOrderd = files
                     .Select(file => new
                     {
-                        FileName = file.Split(' ').Last(), // Extract the file name
-                        ModificationDate = GetModificationDate(file) // Get modification date
+                        FileName = file.Split(' ').Last(),
+                        ModificationDate = GetModificationDate(file)
                     })
-                    .Where(x => x.ModificationDate > _crawlConfiguration.StartCrawlingDate) // Filter by StartCrawlingDate
-                    .OrderByDescending(x => x.ModificationDate) // Sort by modification date descending
-                    .Select(x => x.FileName) // Return only the file name
+                    .Where(x => x.ModificationDate > _crawlConfiguration.StartCrawlingDate)
+                    .OrderByDescending(x => x.ModificationDate)
+                    .Select(x => x.FileName)
                     .ToList();
                 foreach (string fileName in gzFileOrderd)
                 {
@@ -137,7 +132,7 @@ namespace GeneyX.Services
         private async Task<bool> HandleFile(string fileName)
         {
 
-            byte[]? gzFile = await DownloadFileFromFTP(_ftpUrl + fileName);
+            string? gzFile = await DownloadFileFromFTP(_ftpUrl + fileName);
             if (gzFile == null)
             {
                 return false;
@@ -151,37 +146,28 @@ namespace GeneyX.Services
             return false;
         }
 
-        private async Task<byte[]?> DownloadFileFromFTP(string ftpFileName)
+        private async Task<string?> DownloadFileFromFTP(string ftpFileName)
         {
-            _logger.LogInformation("Start Download " + ftpFileName);
 
             try
             {
-                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpFileName);
-                request.Timeout = 60000;
-                FtpWebResponse response = (FtpWebResponse)request.GetResponse();
 
-                Stream responseStream = response.GetResponseStream();
-                StreamReader reader = new StreamReader(responseStream);
-                if (!reader.BaseStream.CanRead)
+                string tempName = Path.GetTempFileName() + ".xml.gz";
+                Console.WriteLine($"File {ftpFileName} start downloaded to {tempName}");
+                using (HttpClient client = new HttpClient())
                 {
-                    _logger.LogError("Stream is closed. Cannot read data.");
-                    return null;
-                }
-                MemoryStream memoryStream = new MemoryStream();
-                await responseStream.CopyToAsync(memoryStream);
-                byte[]? file = memoryStream.ToArray();
+                    HttpResponseMessage response = await client.GetAsync(ftpFileName.Replace("ftp://", "https://"));
+                    response.EnsureSuccessStatusCode();
 
-                _logger.LogInformation($"Download Complete, status {response.StatusDescription}");
-                reader.Close();
-                response.Close();
-                memoryStream.Close();
-                if (!IsGzipFile(file))
-                {
-                    _logger.LogError("The file is not a valid GZip format.");
-                    return null;
+                    await using (var fileStream = new FileStream(tempName, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        await response.Content.CopyToAsync(fileStream);
+                    }
                 }
-                return file;
+
+                Console.WriteLine($"File {ftpFileName} downloaded successfully to {tempName}");
+                return tempName;
+
             }
             catch (Exception ex)
             {
@@ -189,21 +175,13 @@ namespace GeneyX.Services
                 return null;
             }
         }
-        private bool IsGzipFile(byte[] fileData)
-        {
-            return fileData.Length > 2 && fileData[0] == 0x1F && fileData[1] == 0x8B;
-        }
 
-        private async Task<string?> DecompressGzipStream(byte[] compressedData)
+        private async Task<string?> DecompressGzipStream(string filePath)
         {
             _logger.LogInformation("Start decompress ");
-            string tempFilePath = Path.GetTempFileName() + ".gz";
             try
             {
-                // Write to a temporary file
-                await File.WriteAllBytesAsync(tempFilePath, compressedData);
-                _logger.LogInformation($"temp {tempFilePath}");
-                using FileStream fileStream = new FileStream(tempFilePath, FileMode.Open, FileAccess.Read);
+                using FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
                 GZipStream gzipStream = new GZipStream(fileStream, CompressionMode.Decompress);
                 StreamReader reader = new StreamReader(gzipStream, Encoding.UTF8);
                 string? decompressGzip = await reader.ReadToEndAsync();
@@ -214,7 +192,7 @@ namespace GeneyX.Services
             }
             catch (InvalidDataException ex)
             {
-                _logger.LogError(ex, "Failed to decompress file. It might not be a valid GZip file.");
+                _logger.LogError(ex, "Failed to decompress file. It might not be a valid GZip file." + filePath);
                 return null;
             }
             catch (Exception ex)
@@ -224,31 +202,25 @@ namespace GeneyX.Services
             }
             finally
             {
-                // Clean up the temporary file
-                if (File.Exists(tempFilePath))
+                if (File.Exists(filePath))
                 {
-                    File.Delete(tempFilePath);
+                    File.Delete(filePath);
                 }
             }
         }
         static DateTime GetModificationDate(string fileLine)
         {
             string[] split = fileLine.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            // Split the line and remove empty entries  Assuming the date can be in positions: Month [5], Day [6], Year [7] or Day (split[7]) with Year missing
             int year;
             string? month = split[5];
             string? day = split[6];
-
-            // Check if the year is present (7h index) or assume it's last year
             if (split.Length > 7 && int.TryParse(split[7], out year))
             {
-                // Year is present
-                return DateTime.Parse($"{month} {day} {year}"); // Combine month, day, and year
+                return DateTime.Parse($"{month} {day} {year}");
             }
             else
             {
-                // Year is not present, use current year or adjust logic if needed
-                year = DateTime.Now.Year; // This assumes that the files are from the current year; adjust logic if needed
+                year = DateTime.Now.Year; 
                 return DateTime.Parse($"{month} {day} {year} {split[7]}");
             }
         }
@@ -262,7 +234,6 @@ namespace GeneyX.Services
                 {
                     if (article != null)
                     {
-                        // Create a new Publication instance
                         Publication publication = new Publication
                         {
                             PMID = article.Descendants("PMID").FirstOrDefault()?.Value,
@@ -274,7 +245,6 @@ namespace GeneyX.Services
                         };
                         if (_publications.Count < 1000)
                         {
-                            _logger.LogInformation($"PMID {publication.PMID} Title {publication.ArticleTitle} publish {publication.PublishedYear}" );
                             _publications.Add(publication);
                             _repository.AddPublication(publication);
                         }

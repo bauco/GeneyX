@@ -1,8 +1,9 @@
 ﻿using GeneyX;
 
-public class PublicationRepository : IPublicationRepository
+public class PublicationRepository
 {
     private readonly List<Publication> _publications = new List<Publication>();
+
     public void AddPublication(Publication publication)
     {
         if(!_publications.Any(p => p.PMID == publication.PMID && p.PublishedYear == publication.PublishedYear))

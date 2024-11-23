@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 [Route("api/[controller]")]
 public class PublicationsController : ControllerBase
 {
-    private readonly IPublicationsService _publicationService;
+    private readonly PublicationsService _publicationService;
 
-    public PublicationsController(IPublicationsService publicationService)
+    public PublicationsController(PublicationsService publicationService)
     {
         _publicationService = publicationService;
     }

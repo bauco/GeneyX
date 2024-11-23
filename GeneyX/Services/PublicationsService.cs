@@ -1,10 +1,10 @@
 using GeneyX;
 
-public class PublicationsService : IPublicationsService
+public class PublicationsService 
 {
-    private readonly IPublicationRepository _repository;
+    private readonly PublicationRepository _repository;
 
-    public PublicationsService(IPublicationRepository repository)
+    public PublicationsService(PublicationRepository repository)
     {
         _repository = repository;
     }
